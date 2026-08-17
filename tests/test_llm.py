@@ -1,12 +1,61 @@
-print("START")
+import os
 
 from app.services.llm_service import LLMService
 
-llm = LLMService()
 
-print("MODEL READY")
+OLLAMA_URL = os.getenv(
+    "OLLAMA_HOST",
+    "http://ollama:11434",
+)
 
-response = llm.generate("AI is")
+LLM_MODEL = os.getenv(
+    "LLM_MODEL",
+    "llama3",
+)
 
-print("OUTPUT:\n")
-print(response)
+
+def test_llm_health():
+
+    llm = LLMService(
+        base_url=OLLAMA_URL,
+        model=LLM_MODEL,
+    )
+
+    assert llm.health_check() is True
+
+
+def test_llm_generate():
+
+    llm = LLMService(
+    base_url=OLLAMA_URL,
+    model=LLM_MODEL,
+    timeout=120,
+)
+
+    response = llm.generate(
+        "What is artificial intelligence?"
+    )
+
+    assert isinstance(response, str)
+
+    assert len(response.strip()) > 0
+
+
+def test_llm_rejects_empty_prompt():
+
+    llm = LLMService(
+        base_url=OLLAMA_URL,
+        model=LLM_MODEL,
+    )
+
+    try:
+
+        llm.generate("")
+
+        assert False, (
+            "Expected ValueError for empty prompt"
+        )
+
+    except ValueError as exc:
+
+        assert str(exc) == "Prompt cannot be empty"

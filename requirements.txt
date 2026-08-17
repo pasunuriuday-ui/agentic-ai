@@ -1,6 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
+httpx
 requests
 pydantic
+pydantic-settings
 qdrant-client
 sentence-transformers
+pytest

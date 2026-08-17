@@ -3,10 +3,15 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct
+from qdrant_client.models import (
+    PointStruct,
+    VectorParams,
+    Distance,
+)
 
 from app.core.config import settings
 from app.services.embedding_service import EmbeddingService
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +21,7 @@ class Document:
     """
     Structured document with text and optional metadata.
     """
+
     text: str
     metadata: Optional[Dict[str, Any]] = None
 
@@ -25,8 +31,10 @@ class Document:
 
     def to_payload(self) -> Dict[str, Any]:
         payload = {"text": self.text}
+
         if self.metadata:
             payload.update(self.metadata)
+
         return payload
 
 
@@ -50,44 +58,89 @@ class RetrievalService:
         self._init_collection()
 
     def _init_collection(self) -> None:
+        """
+        Initialize the Qdrant collection without using the
+        deprecated recreate_collection() method.
+        """
+
         try:
-            self._client.recreate_collection(
+            # Check whether the collection already exists.
+            if self._client.collection_exists(
+                collection_name=self._collection_name
+            ):
+                # Delete the existing collection so the test/demo
+                # environment starts with a clean collection.
+                self._client.delete_collection(
+                    collection_name=self._collection_name
+                )
+
+            # Create the collection using the current Qdrant API.
+            self._client.create_collection(
                 collection_name=self._collection_name,
-                vectors_config={
-                    "size": self.VECTOR_SIZE,
-                    "distance": "Cosine",
-                },
+                vectors_config=VectorParams(
+                    size=self.VECTOR_SIZE,
+                    distance=Distance.COSINE,
+                ),
             )
-            logger.info(f"Collection '{self._collection_name}' initialized")
+
+            logger.info(
+                f"Collection '{self._collection_name}' initialized"
+            )
 
         except Exception as e:
-            logger.error(f"Collection init failed: {e}")
-            raise RuntimeError("Failed to initialize vector collection")
+            logger.error(
+                f"Collection init failed: {e}"
+            )
 
-    def add_documents(self, documents: List[Dict[str, Any]]) -> int:
+            raise RuntimeError(
+                "Failed to initialize vector collection"
+            ) from e
+
+    def add_documents(
+        self,
+        documents: List[Dict[str, Any]],
+    ) -> int:
         if not documents:
-            raise ValueError("Documents list cannot be empty")
+            raise ValueError(
+                "Documents list cannot be empty"
+            )
 
         structured_docs: List[Document] = []
 
         for i, doc in enumerate(documents):
+
             if "text" not in doc:
-                raise ValueError(f"Missing 'text' in document {i}")
+                raise ValueError(
+                    f"Missing 'text' in document {i}"
+                )
 
             structured_docs.append(
                 Document(
                     text=doc["text"],
-                    metadata={k: v for k, v in doc.items() if k != "text"},
+                    metadata={
+                        k: v
+                        for k, v in doc.items()
+                        if k != "text"
+                    },
                 )
             )
 
-        texts = [d.text for d in structured_docs]
+        texts = [
+            document.text
+            for document in structured_docs
+        ]
 
         try:
             vectors = self._embedder.embed(texts)
+
         except Exception as e:
-            logger.error(f"Embedding failed: {e}")
-            raise RuntimeError("Embedding generation failed")
+            logger.error(
+                f"Embedding failed: {e}"
+            )
+
+            raise RuntimeError(
+                "Embedding generation failed"
+            ) from e
 
         points = [
             PointStruct(
@@ -103,51 +156,94 @@ class RetrievalService:
                 collection_name=self._collection_name,
                 points=points,
             )
-            logger.info(f"Indexed {len(points)} documents")
+
+            logger.info(
+                f"Indexed {len(points)} documents"
+            )
+
             return len(points)
 
         except Exception as e:
-            logger.error(f"Upsert failed: {e}")
-            raise RuntimeError("Failed to store documents")
+            logger.error(
+                f"Upsert failed: {e}"
+            )
 
-    def search(self, query: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+            raise RuntimeError(
+                "Failed to store documents"
+            ) from e
+
+    def search(
+        self,
+        query: str,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+
         if not query or not query.strip():
-            raise ValueError("Query cannot be empty")
+            raise ValueError(
+                "Query cannot be empty"
+            )
 
-        search_limit = limit or self.SEARCH_LIMIT
+        search_limit = (
+            limit or self.SEARCH_LIMIT
+        )
 
-        # Embed query
+        # Generate query embedding.
         try:
-            vector = self._embedder.embed([query])[0]
-        except Exception as e:
-            logger.error(f"Query embedding failed: {e}")
-            raise RuntimeError("Query embedding failed")
+            vector = self._embedder.embed(
+                [query]
+            )[0]
 
-        # ✅ FIXED QDRANT API
+        except Exception as e:
+            logger.error(
+                f"Query embedding failed: {e}"
+            )
+
+            raise RuntimeError(
+                "Query embedding failed"
+            ) from e
+
+        # Search Qdrant.
         try:
             results = self._client.query_points(
                 collection_name=self._collection_name,
                 query=vector,
                 limit=search_limit,
             )
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
-            raise RuntimeError("Vector search failed")
 
-        # Extract payloads safely
+        except Exception as e:
+            logger.error(
+                f"Search failed: {e}"
+            )
+
+            raise RuntimeError(
+                "Vector search failed"
+            ) from e
+
+        # Extract payloads safely.
         documents = [
-            point.payload for point in results.points if point.payload
+            point.payload
+            for point in results.points
+            if point.payload
         ]
 
         if not documents:
-            logger.warning(f"No results for query: {query[:50]}")
+            logger.warning(
+                f"No results for query: {query[:50]}"
+            )
 
         return documents
 
     def count(self) -> int:
         try:
-            info = self._client.get_collection(self._collection_name)
+            info = self._client.get_collection(
+                self._collection_name
+            )
+
             return info.points_count
+
         except Exception as e:
-            logger.error(f"Count failed: {e}")
+            logger.error(
+                f"Count failed: {e}"
+            )
+
             return 0

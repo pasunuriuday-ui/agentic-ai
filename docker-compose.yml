@@ -1,0 +1,153 @@
+services:
+
+  # ==========================================================
+  # QDRANT VECTOR DATABASE
+  # ==========================================================
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: agent_vector_db
+
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "timeout 2 bash -c '</dev/tcp/localhost/6333' || exit 1"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+    restart: unless-stopped
+
+
+  # ==========================================================
+  # OLLAMA / LOCAL LLM
+  # ==========================================================
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agent_llm
+
+    ports:
+      - "11434:11434"
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "=========================================="
+        echo "Starting Ollama"
+        echo "=========================================="
+
+        ollama serve &
+
+        echo "Waiting for Ollama API..."
+
+        until ollama list >/dev/null 2>&1; do
+          sleep 2
+        done
+
+        echo "Ollama API is ready."
+
+        echo "Checking Llama 3..."
+
+        if ! ollama list | grep -q "llama3"; then
+          echo "Pulling llama3..."
+          ollama pull llama3
+        else
+          echo "llama3 already installed."
+        fi
+
+        echo "Checking embedding model..."
+
+        if ! ollama list | grep -q "nomic-embed-text"; then
+          echo "Pulling nomic-embed-text..."
+          ollama pull nomic-embed-text
+        else
+          echo "nomic-embed-text already installed."
+        fi
+
+        echo "=========================================="
+        echo "Ollama models ready"
+        echo "=========================================="
+
+        wait
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "ollama list | grep -q 'llama3' && ollama list | grep -q 'nomic-embed-text'"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+      start_period: 15s
+
+    restart: unless-stopped
+
+
+  # ==========================================================
+  # FASTAPI AGENTIC AI API
+  # ==========================================================
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: agent_api
+
+    ports:
+      - "8000:8000"
+
+    environment:
+
+      # Docker service names
+      OLLAMA_HOST: http://ollama:11434
+      QDRANT_HOST: http://qdrant:6333
+
+      # Models
+      EMBED_MODEL: nomic-embed-text
+      LLM_MODEL: llama3
+
+      # Qdrant
+      COLLECTION_NAME: knowledge
+
+      # Retrieval
+      TOP_K: 3
+
+    depends_on:
+
+      qdrant:
+        condition: service_healthy
+
+      ollama:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+
+# ==========================================================
+# PERSISTENT STORAGE
+# ==========================================================
+
+volumes:
+
+  qdrant_data:
+    name: agent_qdrant_data
+
+  ollama_data:
+    name: agent_ollama_data
