@@ -7,3 +7,5 @@ pydantic-settings
 qdrant-client
 sentence-transformers
 pytest
+PyMuPDF
+python-multipart
