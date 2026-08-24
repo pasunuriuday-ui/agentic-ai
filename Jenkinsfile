@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        VENV = "${WORKSPACE}/.venv"
-    }
-
     stages {
 
         stage('Checkout') {
@@ -13,13 +9,12 @@ pipeline {
             }
         }
 
-        stage('Create Python Virtual Environment') {
+        stage('Setup Python Environment') {
             steps {
                 sh '''
-                    rm -rf "$VENV"
-                    python3 -m venv "$VENV"
-                    "$VENV/bin/python" --version
-                    "$VENV/bin/pip" --version
+                    python3 -m venv .venv
+                    .venv/bin/python --version
+                    .venv/bin/pip --version
                 '''
             }
         }
@@ -27,8 +22,8 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    "$VENV/bin/python" -m pip install --upgrade pip
-                    "$VENV/bin/pip" install -r requirements.txt
+                    .venv/bin/pip install --upgrade pip
+                    .venv/bin/pip install -r requirements.txt
                 '''
             }
         }
@@ -36,7 +31,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 sh '''
-                    "$VENV/bin/python" -m pytest -q
+                    .venv/bin/pytest -q
                 '''
             }
         }
@@ -51,7 +46,6 @@ pipeline {
     }
 
     post {
-
         success {
             echo 'CI pipeline completed successfully.'
         }
