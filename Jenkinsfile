@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        sonarQube 'SonarScanner'
-    }
-
     stages {
 
         stage('Checkout') {
@@ -44,7 +40,9 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh '''
-                        sonar-scanner \
+                        SONAR_SCANNER=$(tool 'SonarScanner')
+
+                        "$SONAR_SCANNER/bin/sonar-scanner" \
                           -Dsonar.projectKey=agentic-ai \
                           -Dsonar.projectName=agentic-ai \
                           -Dsonar.sources=app \
