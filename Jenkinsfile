@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        sonarQube 'SonarScanner'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -32,7 +36,7 @@ pipeline {
             steps {
                 sh '''
                     .venv/bin/pytest -q
-            '''
+                '''
             }
         }
 
