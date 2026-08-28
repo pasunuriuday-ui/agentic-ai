@@ -32,7 +32,22 @@ pipeline {
             steps {
                 sh '''
                     .venv/bin/pytest -q
-                '''
+            '''
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        sonar-scanner \
+                          -Dsonar.projectKey=agentic-ai \
+                          -Dsonar.projectName=agentic-ai \
+                          -Dsonar.sources=app \
+                          -Dsonar.tests=tests \
+                          -Dsonar.python.version=3.13
+                    '''
+                }
             }
         }
 
