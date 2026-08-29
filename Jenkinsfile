@@ -16,7 +16,6 @@ pipeline {
 
         // =========================================
         // PYTORCH / CUDA
-        // Prevent unnecessary GPU usage in Jenkins CI
         // =========================================
         CUDA_VISIBLE_DEVICES = ''
         PYTORCH_ENABLE_MPS_FALLBACK = '1'
@@ -34,7 +33,7 @@ pipeline {
         }
 
         // =========================================
-        // 2. PYTHON ENVIRONMENT
+        // 2. SETUP PYTHON ENVIRONMENT
         // =========================================
         stage('Setup Python Environment') {
             steps {
@@ -49,19 +48,17 @@ pipeline {
 
                     python3 -m venv .venv
 
-                    echo
-                    echo "Python:"
+                    echo "Python version:"
                     .venv/bin/python --version
 
-                    echo
-                    echo "Pip:"
+                    echo "Pip version:"
                     .venv/bin/pip --version
                 '''
             }
         }
 
         // =========================================
-        // 3. DEPENDENCIES
+        // 3. INSTALL DEPENDENCIES
         // =========================================
         stage('Install Dependencies') {
             steps {
@@ -76,7 +73,6 @@ pipeline {
 
                     .venv/bin/pip install -r requirements.txt
 
-                    echo
                     echo "Dependencies installed successfully."
                 '''
             }
@@ -94,14 +90,10 @@ pipeline {
                     echo "VERIFY REQUIRED SERVICES"
                     echo "========================================="
 
-                    echo
                     echo "OLLAMA_HOST=${OLLAMA_HOST}"
                     echo "LLM_MODEL=${LLM_MODEL}"
                     echo "QDRANT_URL=${QDRANT_URL}"
 
-                    # ---------------------------------
-                    # Ollama
-                    # ---------------------------------
                     echo
                     echo "Checking Ollama..."
 
@@ -115,9 +107,6 @@ pipeline {
                     echo
                     echo "Ollama connectivity: OK"
 
-                    # ---------------------------------
-                    # Qdrant
-                    # ---------------------------------
                     echo
                     echo "Checking Qdrant..."
 
@@ -138,7 +127,7 @@ pipeline {
         }
 
         // =========================================
-        // 5. OLLAMA MODEL CHECK
+        // 5. CHECK OLLAMA MODEL
         // =========================================
         stage('Ollama Model Check') {
             steps {
@@ -161,7 +150,7 @@ pipeline {
                     echo "${RESPONSE}"
 
                     echo
-                    echo "Checking for required model: ${LLM_MODEL}"
+                    echo "Checking required model: ${LLM_MODEL}"
 
                     echo "${RESPONSE}" | grep -q "\"name\":\"${LLM_MODEL}\""
 
@@ -224,13 +213,6 @@ pipeline {
                     echo "SONARQUBE ANALYSIS"
                     echo "========================================="
 
-                    // Must exactly match:
-                    // Manage Jenkins
-                    // -> Tools
-                    // -> SonarQube Scanner installations
-                    //
-                    // Name:
-                    // SonarScanner
                     def sonarScannerHome = tool name: 'SonarScanner'
 
                     echo "SonarScanner home: ${sonarScannerHome}"
@@ -249,7 +231,6 @@ pipeline {
                                 -Dsonar.tests=tests \
                                 -Dsonar.python.version=3.13
 
-                            echo
                             echo "SonarQube analysis completed successfully."
                         """
                     }
@@ -272,7 +253,6 @@ pipeline {
                         abortPipeline: true
                     )
 
-                    echo
                     echo "SonarQube Quality Gate passed."
                 }
             }
