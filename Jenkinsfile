@@ -5,9 +5,9 @@ pipeline {
         // =========================================
         // APPLICATION SERVICES
         // =========================================
-        OLLAMA_HOST = 'http://agent_llm:11434'
-        LLM_MODEL   = 'llama3:latest'
-        QDRANT_URL  = 'http://agent_vector_db:6333'
+        OLLAMA_HOST  = 'http://agent_llm:11434'
+        LLM_MODEL    = 'llama3:latest'
+        QDRANT_URL   = 'http://agent_vector_db:6333'
 
         // =========================================
         // DOCKER IMAGE
@@ -48,10 +48,7 @@ pipeline {
 
                     python3 -m venv .venv
 
-                    echo "Python version:"
                     .venv/bin/python --version
-
-                    echo "Pip version:"
                     .venv/bin/pip --version
                 '''
             }
@@ -71,15 +68,14 @@ pipeline {
 
                     .venv/bin/pip install --upgrade pip
 
-                    .venv/bin/pip install -r requirements.txt
-
-                    echo "Dependencies installed successfully."
+                    .venv/bin/pip install \
+                        -r requirements.txt
                 '''
             }
         }
 
         // =========================================
-        // 4. VERIFY REQUIRED SERVICES
+        // 4. VERIFY OLLAMA + QDRANT
         // =========================================
         stage('Verify Services') {
             steps {
@@ -97,12 +93,11 @@ pipeline {
                     echo
                     echo "Checking Ollama..."
 
-                    curl \
-                        --fail \
-                        --silent \
-                        --show-error \
-                        --max-time 30 \
-                        "${OLLAMA_HOST}/api/tags"
+                    curl --fail \
+                         --silent \
+                         --show-error \
+                         --max-time 30 \
+                         "${OLLAMA_HOST}/api/tags"
 
                     echo
                     echo "Ollama connectivity: OK"
@@ -110,12 +105,11 @@ pipeline {
                     echo
                     echo "Checking Qdrant..."
 
-                    curl \
-                        --fail \
-                        --silent \
-                        --show-error \
-                        --max-time 30 \
-                        "${QDRANT_URL}/healthz"
+                    curl --fail \
+                         --silent \
+                         --show-error \
+                         --max-time 30 \
+                         "${QDRANT_URL}/healthz"
 
                     echo
                     echo "Qdrant connectivity: OK"
@@ -127,7 +121,7 @@ pipeline {
         }
 
         // =========================================
-        // 5. CHECK OLLAMA MODEL
+        // 5. VERIFY OLLAMA MODEL
         // =========================================
         stage('Ollama Model Check') {
             steps {
@@ -138,24 +132,34 @@ pipeline {
                     echo "CHECK OLLAMA MODEL"
                     echo "========================================="
 
-                    RESPONSE=$(curl \
-                        --fail \
+                    RESPONSE=$(curl --fail \
                         --silent \
                         --show-error \
                         --max-time 30 \
                         "${OLLAMA_HOST}/api/tags")
 
-                    echo
-                    echo "Available Ollama models:"
                     echo "${RESPONSE}"
 
-                    echo
-                    echo "Checking required model: ${LLM_MODEL}"
+                    if echo "${RESPONSE}" | grep -q '"name":"llama3:latest"'; then
 
-                    echo "${RESPONSE}" | grep -q "\"name\":\"${LLM_MODEL}\""
+                        echo
+                        echo "Required model ${LLM_MODEL} is available."
 
-                    echo
-                    echo "Required model ${LLM_MODEL} is available."
+                    else
+
+                        echo
+                        echo "[ERROR] Required model ${LLM_MODEL} is NOT available."
+
+                        echo
+                        echo "Available models:"
+                        echo "${RESPONSE}"
+
+                        echo
+                        echo "Run this command on the host:"
+                        echo "docker exec agent_llm ollama pull ${LLM_MODEL}"
+
+                        exit 1
+                    fi
                 '''
             }
         }
@@ -172,10 +176,9 @@ pipeline {
                     echo "RUN UNIT TESTS"
                     echo "========================================="
 
-                    .venv/bin/pytest -m "not integration" -v
-
-                    echo
-                    echo "Unit tests completed successfully."
+                    .venv/bin/pytest \
+                        -m "not integration" \
+                        -q
                 '''
             }
         }
@@ -186,6 +189,7 @@ pipeline {
         stage('LLM Integration Tests') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
+
                     sh '''
                         set -e
 
@@ -193,10 +197,9 @@ pipeline {
                         echo "RUN LLM INTEGRATION TESTS"
                         echo "========================================="
 
-                        .venv/bin/pytest -m integration -v
-
-                        echo
-                        echo "LLM integration tests completed successfully."
+                        .venv/bin/pytest \
+                            -m integration \
+                            -q
                     '''
                 }
             }
@@ -213,7 +216,8 @@ pipeline {
                     echo "SONARQUBE ANALYSIS"
                     echo "========================================="
 
-                    def sonarScannerHome = tool name: 'SonarScanner'
+                    def sonarScannerHome =
+                        tool name: 'SonarScanner'
 
                     echo "SonarScanner home: ${sonarScannerHome}"
 
@@ -231,7 +235,8 @@ pipeline {
                                 -Dsonar.tests=tests \
                                 -Dsonar.python.version=3.13
 
-                            echo "SonarQube analysis completed successfully."
+                            echo
+                            echo "SonarQube analysis completed."
                         """
                     }
                 }
@@ -245,15 +250,9 @@ pipeline {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
 
-                    echo "========================================="
-                    echo "WAITING FOR SONARQUBE QUALITY GATE"
-                    echo "========================================="
-
                     waitForQualityGate(
                         abortPipeline: true
                     )
-
-                    echo "SonarQube Quality Gate passed."
                 }
             }
         }
@@ -278,8 +277,12 @@ pipeline {
                     echo "Docker image built successfully."
 
                     echo
-                    echo "Docker image:"
-                    docker images ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                    echo "========================================="
+                    echo "DOCKER IMAGE"
+                    echo "========================================="
+
+                    docker images \
+                        ${DOCKER_IMAGE}:${BUILD_NUMBER}
                 '''
             }
         }
@@ -294,28 +297,22 @@ pipeline {
             echo "========================================="
             echo "CI/CD PIPELINE SUCCESS"
             echo "========================================="
-
             echo "Build: ${BUILD_NUMBER}"
             echo "Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
-
-            echo "========================================="
         }
 
         failure {
             echo "========================================="
             echo "CI/CD PIPELINE FAILED"
             echo "========================================="
-
             echo "Build: ${BUILD_NUMBER}"
-
-            echo "========================================="
         }
 
         always {
             echo "========================================="
             echo "BUILD FINISHED"
-            echo "Build: ${BUILD_NUMBER}"
             echo "========================================="
+            echo "Build: ${BUILD_NUMBER}"
         }
     }
 }
