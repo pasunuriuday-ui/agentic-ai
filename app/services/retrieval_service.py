@@ -43,7 +43,7 @@ class RetrievalService:
     Semantic document retrieval using Qdrant vector search.
     """
 
-    VECTOR_SIZE: int = 384
+    VECTOR_SIZE: int = 768
     SEARCH_LIMIT: int = 3
 
     def __init__(
