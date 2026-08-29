@@ -2,39 +2,48 @@ pipeline {
     agent any
 
     environment {
-        // =========================================
+        // ============================================================
         // APPLICATION SERVICES
-        // =========================================
-        OLLAMA_HOST  = 'http://agent_llm:11434'
-        LLM_MODEL    = 'llama3:latest'
-        QDRANT_URL   = 'http://agent_vector_db:6333'
+        // ============================================================
+        OLLAMA_HOST = 'http://agent_llm:11434'
+        LLM_MODEL = 'llama3:latest'
 
-        // =========================================
-        // DOCKER IMAGE
-        // =========================================
+        QDRANT_HOST = 'http://agent_vector_db:6333'
+        QDRANT_URL = 'http://agent_vector_db:6333'
+
+        EMBEDDING_MODEL = 'nomic-embed-text:latest'
+
+        // Use the collection name already used by the application
+        COLLECTION_NAME = 'agentic_ai'
+
+        // ============================================================
+        // DOCKER
+        // ============================================================
         DOCKER_IMAGE = 'agentic-ai-api'
 
-        // =========================================
-        // PYTORCH / CUDA
-        // =========================================
+        // ============================================================
+        // PYTHON / MEMORY
+        // ============================================================
         CUDA_VISIBLE_DEVICES = ''
         PYTORCH_ENABLE_MPS_FALLBACK = '1'
+
+        PYTHONUNBUFFERED = '1'
     }
 
     stages {
 
-        // =========================================
+        // ============================================================
         // 1. CHECKOUT
-        // =========================================
+        // ============================================================
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        // =========================================
-        // 2. SETUP PYTHON ENVIRONMENT
-        // =========================================
+        // ============================================================
+        // 2. PYTHON ENVIRONMENT
+        // ============================================================
         stage('Setup Python Environment') {
             steps {
                 sh '''
@@ -54,9 +63,9 @@ pipeline {
             }
         }
 
-        // =========================================
-        // 3. INSTALL DEPENDENCIES
-        // =========================================
+        // ============================================================
+        // 3. DEPENDENCIES
+        // ============================================================
         stage('Install Dependencies') {
             steps {
                 sh '''
@@ -67,16 +76,14 @@ pipeline {
                     echo "========================================="
 
                     .venv/bin/pip install --upgrade pip
-
-                    .venv/bin/pip install \
-                        -r requirements.txt
+                    .venv/bin/pip install -r requirements.txt
                 '''
             }
         }
 
-        // =========================================
-        // 4. VERIFY OLLAMA + QDRANT
-        // =========================================
+        // ============================================================
+        // 4. VERIFY SERVICES
+        // ============================================================
         stage('Verify Services') {
             steps {
                 sh '''
@@ -88,7 +95,10 @@ pipeline {
 
                     echo "OLLAMA_HOST=${OLLAMA_HOST}"
                     echo "LLM_MODEL=${LLM_MODEL}"
+                    echo "QDRANT_HOST=${QDRANT_HOST}"
                     echo "QDRANT_URL=${QDRANT_URL}"
+                    echo "EMBEDDING_MODEL=${EMBEDDING_MODEL}"
+                    echo "COLLECTION_NAME=${COLLECTION_NAME}"
 
                     echo
                     echo "Checking Ollama..."
@@ -96,6 +106,7 @@ pipeline {
                     curl --fail \
                          --silent \
                          --show-error \
+                         --connect-timeout 5 \
                          --max-time 30 \
                          "${OLLAMA_HOST}/api/tags"
 
@@ -108,6 +119,7 @@ pipeline {
                     curl --fail \
                          --silent \
                          --show-error \
+                         --connect-timeout 5 \
                          --max-time 30 \
                          "${QDRANT_URL}/healthz"
 
@@ -120,9 +132,9 @@ pipeline {
             }
         }
 
-        // =========================================
-        // 5. VERIFY OLLAMA MODEL
-        // =========================================
+        // ============================================================
+        // 5. OLLAMA MODEL CHECK
+        // ============================================================
         stage('Ollama Model Check') {
             steps {
                 sh '''
@@ -135,38 +147,30 @@ pipeline {
                     RESPONSE=$(curl --fail \
                         --silent \
                         --show-error \
+                        --connect-timeout 5 \
                         --max-time 30 \
                         "${OLLAMA_HOST}/api/tags")
 
                     echo "${RESPONSE}"
 
-                    if echo "${RESPONSE}" | grep -q '"name":"llama3:latest"'; then
-
+                    if echo "${RESPONSE}" | grep -q "\"name\":\"${LLM_MODEL}\""; then
                         echo
                         echo "Required model ${LLM_MODEL} is available."
-
                     else
-
                         echo
                         echo "[ERROR] Required model ${LLM_MODEL} is NOT available."
-
                         echo
-                        echo "Available models:"
-                        echo "${RESPONSE}"
-
-                        echo
-                        echo "Run this command on the host:"
+                        echo "Run:"
                         echo "docker exec agent_llm ollama pull ${LLM_MODEL}"
-
                         exit 1
                     fi
                 '''
             }
         }
 
-        // =========================================
+        // ============================================================
         // 6. UNIT TESTS
-        // =========================================
+        // ============================================================
         stage('Unit Tests') {
             steps {
                 sh '''
@@ -176,20 +180,31 @@ pipeline {
                     echo "RUN UNIT TESTS"
                     echo "========================================="
 
-                    .venv/bin/pytest \
+                    echo "Python:"
+                    .venv/bin/python --version
+
+                    echo
+                    echo "Environment:"
+                    echo "OLLAMA_HOST=${OLLAMA_HOST}"
+                    echo "QDRANT_HOST=${QDRANT_HOST}"
+                    echo "LLM_MODEL=${LLM_MODEL}"
+
+                    echo
+                    echo "Running pytest..."
+
+                    .venv/bin/python -m pytest \
                         -m "not integration" \
                         -q
                 '''
             }
         }
 
-        // =========================================
-        // 7. LLM INTEGRATION TESTS
-        // =========================================
+        // ============================================================
+        // 7. INTEGRATION TESTS
+        // ============================================================
         stage('LLM Integration Tests') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
-
                     sh '''
                         set -e
 
@@ -197,7 +212,11 @@ pipeline {
                         echo "RUN LLM INTEGRATION TESTS"
                         echo "========================================="
 
-                        .venv/bin/pytest \
+                        echo "OLLAMA_HOST=${OLLAMA_HOST}"
+                        echo "QDRANT_HOST=${QDRANT_HOST}"
+                        echo "LLM_MODEL=${LLM_MODEL}"
+
+                        .venv/bin/python -m pytest \
                             -m integration \
                             -q
                     '''
@@ -205,9 +224,9 @@ pipeline {
             }
         }
 
-        // =========================================
-        // 8. SONARQUBE ANALYSIS
-        // =========================================
+        // ============================================================
+        // 8. SONARQUBE
+        // ============================================================
         stage('SonarQube Analysis') {
             steps {
                 script {
@@ -216,8 +235,7 @@ pipeline {
                     echo "SONARQUBE ANALYSIS"
                     echo "========================================="
 
-                    def sonarScannerHome =
-                        tool name: 'SonarScanner'
+                    def sonarScannerHome = tool name: 'SonarScanner'
 
                     echo "SonarScanner home: ${sonarScannerHome}"
 
@@ -229,11 +247,11 @@ pipeline {
                             echo "Running SonarScanner..."
 
                             "${sonarScannerHome}/bin/sonar-scanner" \
-                                -Dsonar.projectKey=agentic-ai \
-                                -Dsonar.projectName=agentic-ai \
-                                -Dsonar.sources=app \
-                                -Dsonar.tests=tests \
-                                -Dsonar.python.version=3.13
+                              -Dsonar.projectKey=agentic-ai \
+                              -Dsonar.projectName=agentic-ai \
+                              -Dsonar.sources=app \
+                              -Dsonar.tests=tests \
+                              -Dsonar.python.version=3.13
 
                             echo
                             echo "SonarQube analysis completed."
@@ -243,23 +261,20 @@ pipeline {
             }
         }
 
-        // =========================================
+        // ============================================================
         // 9. QUALITY GATE
-        // =========================================
+        // ============================================================
         stage('Quality Gate') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
-
-                    waitForQualityGate(
-                        abortPipeline: true
-                    )
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        // =========================================
+        // ============================================================
         // 10. DOCKER BUILD
-        // =========================================
+        // ============================================================
         stage('Docker Build') {
             steps {
                 sh '''
@@ -277,26 +292,23 @@ pipeline {
                     echo "Docker image built successfully."
 
                     echo
-                    echo "========================================="
-                    echo "DOCKER IMAGE"
-                    echo "========================================="
-
-                    docker images \
-                        ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                    echo "Image:"
+                    docker images ${DOCKER_IMAGE}:${BUILD_NUMBER}
                 '''
             }
         }
     }
 
-    // =============================================
+    // ================================================================
     // POST ACTIONS
-    // =============================================
+    // ================================================================
     post {
 
         success {
             echo "========================================="
             echo "CI/CD PIPELINE SUCCESS"
             echo "========================================="
+
             echo "Build: ${BUILD_NUMBER}"
             echo "Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
         }
@@ -305,6 +317,7 @@ pipeline {
             echo "========================================="
             echo "CI/CD PIPELINE FAILED"
             echo "========================================="
+
             echo "Build: ${BUILD_NUMBER}"
         }
 
@@ -312,6 +325,7 @@ pipeline {
             echo "========================================="
             echo "BUILD FINISHED"
             echo "========================================="
+
             echo "Build: ${BUILD_NUMBER}"
         }
     }
