@@ -5,29 +5,26 @@ pipeline {
         // ============================================================
         // APPLICATION SERVICES
         // ============================================================
-        OLLAMA_HOST = 'http://agent_llm:11434'
-        LLM_MODEL = 'llama3:latest'
+        OLLAMA_HOST      = 'http://agent_llm:11434'
+        LLM_MODEL        = 'llama3:latest'
 
-        QDRANT_HOST = 'http://agent_vector_db:6333'
-        QDRANT_URL = 'http://agent_vector_db:6333'
+        QDRANT_HOST      = 'http://agent_vector_db:6333'
+        QDRANT_URL       = 'http://agent_vector_db:6333'
 
-        EMBEDDING_MODEL = 'nomic-embed-text:latest'
-
-        // Use the collection name already used by the application
-        COLLECTION_NAME = 'agentic_ai'
+        EMBEDDING_MODEL  = 'nomic-embed-text:latest'
+        COLLECTION_NAME  = 'agentic_ai'
 
         // ============================================================
         // DOCKER
         // ============================================================
-        DOCKER_IMAGE = 'agentic-ai-api'
+        DOCKER_IMAGE     = 'agentic-ai-api'
 
         // ============================================================
         // PYTHON / MEMORY
         // ============================================================
-        CUDA_VISIBLE_DEVICES = ''
+        CUDA_VISIBLE_DEVICES       = ''
         PYTORCH_ENABLE_MPS_FALLBACK = '1'
-
-        PYTHONUNBUFFERED = '1'
+        PYTHONUNBUFFERED            = '1'
     }
 
     stages {
@@ -153,14 +150,20 @@ pipeline {
 
                     echo "${RESPONSE}"
 
-                    if echo "${RESPONSE}" | grep -q "\"name\":\"${LLM_MODEL}\""; then
+                    if echo "${RESPONSE}" | grep -q '"name":"'"${LLM_MODEL}"'"'; then
                         echo
                         echo "Required model ${LLM_MODEL} is available."
                     else
                         echo
                         echo "[ERROR] Required model ${LLM_MODEL} is NOT available."
                         echo
-                        echo "Run:"
+                        echo "Expected model:"
+                        echo "${LLM_MODEL}"
+                        echo
+                        echo "Available models:"
+                        echo "${RESPONSE}"
+                        echo
+                        echo "Run on the Docker host:"
                         echo "docker exec agent_llm ollama pull ${LLM_MODEL}"
                         exit 1
                     fi
@@ -200,7 +203,7 @@ pipeline {
         }
 
         // ============================================================
-        // 7. INTEGRATION TESTS
+        // 7. LLM INTEGRATION TESTS
         // ============================================================
         stage('LLM Integration Tests') {
             steps {
@@ -225,7 +228,7 @@ pipeline {
         }
 
         // ============================================================
-        // 8. SONARQUBE
+        // 8. SONARQUBE ANALYSIS
         // ============================================================
         stage('SonarQube Analysis') {
             steps {
