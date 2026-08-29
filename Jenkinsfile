@@ -22,7 +22,7 @@ pipeline {
         // ============================================================
         // PYTHON / MEMORY
         // ============================================================
-        CUDA_VISIBLE_DEVICES       = ''
+        CUDA_VISIBLE_DEVICES        = ''
         PYTORCH_ENABLE_MPS_FALLBACK = '1'
         PYTHONUNBUFFERED            = '1'
     }
@@ -150,7 +150,8 @@ pipeline {
 
                     echo "${RESPONSE}"
 
-                    if echo "${RESPONSE}" | grep -q '"name":"'"${LLM_MODEL}"'"'; then
+                    # Robust check using python (already created in .venv or system python3)
+                    if python3 -c 'import sys, json; data=json.loads(sys.argv[1]); models=[m.get("name") for m in data.get("models",[])]; sys.exit(0 if sys.argv[2] in models else 1)' "${RESPONSE}" "${LLM_MODEL}"; then
                         echo
                         echo "Required model ${LLM_MODEL} is available."
                     else
