@@ -138,7 +138,7 @@ pipeline {
                     set -e
 
                     echo "========================================="
-                    echo "CHECK OLLAMA MODEL"
+                    echo "CHECK OLLAMA MODELS"
                     echo "========================================="
 
                     RESPONSE=$(curl --fail \
@@ -152,10 +152,10 @@ pipeline {
 
                     if python3 -c 'import sys, json; data=json.loads(sys.argv[1]); models=[m.get("name") for m in data.get("models",[])]; sys.exit(0 if sys.argv[2] in models else 1)' "${RESPONSE}" "${LLM_MODEL}"; then
                         echo
-                        echo "Required model ${LLM_MODEL} is available."
+                        echo "Required LLM model ${LLM_MODEL} is available."
                     else
                         echo
-                        echo "[ERROR] Required model ${LLM_MODEL} is NOT available."
+                        echo "[ERROR] Required LLM model ${LLM_MODEL} is NOT available."
                         echo
                         echo "Expected model:"
                         echo "${LLM_MODEL}"
@@ -167,6 +167,27 @@ pipeline {
                         echo "docker exec agent_llm ollama pull ${LLM_MODEL}"
                         exit 1
                     fi
+
+                    if python3 -c 'import sys, json; data=json.loads(sys.argv[1]); models=[m.get("name") for m in data.get("models",[])]; sys.exit(0 if sys.argv[2] in models else 1)' "${RESPONSE}" "${EMBEDDING_MODEL}"; then
+                        echo
+                        echo "Required embedding model ${EMBEDDING_MODEL} is available."
+                    else
+                        echo
+                        echo "[ERROR] Required embedding model ${EMBEDDING_MODEL} is NOT available."
+                        echo
+                        echo "Expected model:"
+                        echo "${EMBEDDING_MODEL}"
+                        echo
+                        echo "Available models:"
+                        echo "${RESPONSE}"
+                        echo
+                        echo "Run on the Docker host:"
+                        echo "docker exec agent_llm ollama pull ${EMBEDDING_MODEL}"
+                        exit 1
+                    fi
+
+                    echo
+                    echo "All required Ollama models are available."
                 '''
             }
         }
@@ -232,7 +253,50 @@ pipeline {
         }
 
         // ============================================================
-        // 8. SONARQUBE ANALYSIS
+        // 8. VERIFY SONARQUBE AUTHENTICATION
+        // ============================================================
+        stage('Verify Sonar Authentication') {
+            steps {
+                withCredentials([string(
+                    credentialsId: 'sonar-token',
+                    variable: 'SONAR_TOKEN'
+                )]) {
+                    sh '''
+                        set -e
+
+                        echo "========================================="
+                        echo "VERIFY SONARQUBE AUTHENTICATION"
+                        echo "========================================="
+
+                        HTTP_CODE=$(curl -s \
+                            -o /tmp/sonar-auth.json \
+                            -w "%{http_code}" \
+                            -u "${SONAR_TOKEN}:" \
+                            http://sonarqube:9000/api/authentication/validate)
+
+                        echo "HTTP status: ${HTTP_CODE}"
+
+                        if [ "${HTTP_CODE}" != "200" ]; then
+                            echo "[ERROR] SonarQube authentication failed."
+                            echo
+                            cat /tmp/sonar-auth.json
+                            rm -f /tmp/sonar-auth.json
+                            exit 1
+                        fi
+
+                        cat /tmp/sonar-auth.json
+
+                        echo
+                        echo "SonarQube authentication: OK"
+
+                        rm -f /tmp/sonar-auth.json
+                    '''
+                }
+            }
+        }
+
+        // ============================================================
+        // 9. SONARQUBE ANALYSIS
         // ============================================================
         stage('SonarQube Analysis') {
             steps {
@@ -269,7 +333,7 @@ pipeline {
         }
 
         // ============================================================
-        // 9. QUALITY GATE
+        // 10. QUALITY GATE
         // ============================================================
         stage('Quality Gate') {
             steps {
@@ -280,7 +344,7 @@ pipeline {
         }
 
         // ============================================================
-        // 10. DOCKER BUILD
+        // 11. DOCKER BUILD
         // ============================================================
         stage('Docker Build') {
             steps {
