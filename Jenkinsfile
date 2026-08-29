@@ -12,7 +12,7 @@ pipeline {
         QDRANT_URL       = 'http://agent_vector_db:6333'
 
         EMBEDDING_MODEL  = 'nomic-embed-text:latest'
-        COLLECTION_NAME  = 'agentic_ai'
+        COLLECTION_NAME  = 'knowledge'
 
         // ============================================================
         // DOCKER
@@ -150,7 +150,6 @@ pipeline {
 
                     echo "${RESPONSE}"
 
-                    # Robust check using python (already created in .venv or system python3)
                     if python3 -c 'import sys, json; data=json.loads(sys.argv[1]); models=[m.get("name") for m in data.get("models",[])]; sys.exit(0 if sys.argv[2] in models else 1)' "${RESPONSE}" "${LLM_MODEL}"; then
                         echo
                         echo "Required model ${LLM_MODEL} is available."
@@ -192,6 +191,8 @@ pipeline {
                     echo "OLLAMA_HOST=${OLLAMA_HOST}"
                     echo "QDRANT_HOST=${QDRANT_HOST}"
                     echo "LLM_MODEL=${LLM_MODEL}"
+                    echo "EMBEDDING_MODEL=${EMBEDDING_MODEL}"
+                    echo "COLLECTION_NAME=${COLLECTION_NAME}"
 
                     echo
                     echo "Running pytest..."
@@ -219,6 +220,8 @@ pipeline {
                         echo "OLLAMA_HOST=${OLLAMA_HOST}"
                         echo "QDRANT_HOST=${QDRANT_HOST}"
                         echo "LLM_MODEL=${LLM_MODEL}"
+                        echo "EMBEDDING_MODEL=${EMBEDDING_MODEL}"
+                        echo "COLLECTION_NAME=${COLLECTION_NAME}"
 
                         .venv/bin/python -m pytest \
                             -m integration \
