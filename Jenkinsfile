@@ -2,27 +2,40 @@ pipeline {
     agent any
 
     environment {
-        // Application services
-        OLLAMA_HOST  = 'http://agent_llm:11434'
-        LLM_MODEL    = 'llama3:latest'
-        QDRANT_URL   = 'http://agent_vector_db:6333'
+        // =========================================
+        // APPLICATION SERVICES
+        // =========================================
+        OLLAMA_HOST = 'http://agent_llm:11434'
+        LLM_MODEL   = 'llama3:latest'
+        QDRANT_URL  = 'http://agent_vector_db:6333'
 
-        // Docker image
+        // =========================================
+        // DOCKER IMAGE
+        // =========================================
         DOCKER_IMAGE = 'agentic-ai-api'
-        
-        // Prevent PyTorch/CUDA from blowing up container memory during pytest
+
+        // =========================================
+        // PYTORCH / CUDA
+        // Prevent unnecessary GPU usage in Jenkins CI
+        // =========================================
         CUDA_VISIBLE_DEVICES = ''
         PYTORCH_ENABLE_MPS_FALLBACK = '1'
     }
 
     stages {
 
+        // =========================================
+        // 1. CHECKOUT
+        // =========================================
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
+        // =========================================
+        // 2. PYTHON ENVIRONMENT
+        // =========================================
         stage('Setup Python Environment') {
             steps {
                 sh '''
@@ -36,12 +49,20 @@ pipeline {
 
                     python3 -m venv .venv
 
+                    echo
+                    echo "Python:"
                     .venv/bin/python --version
+
+                    echo
+                    echo "Pip:"
                     .venv/bin/pip --version
                 '''
             }
         }
 
+        // =========================================
+        // 3. DEPENDENCIES
+        // =========================================
         stage('Install Dependencies') {
             steps {
                 sh '''
@@ -52,11 +73,18 @@ pipeline {
                     echo "========================================="
 
                     .venv/bin/pip install --upgrade pip
+
                     .venv/bin/pip install -r requirements.txt
+
+                    echo
+                    echo "Dependencies installed successfully."
                 '''
             }
         }
 
+        // =========================================
+        // 4. VERIFY REQUIRED SERVICES
+        // =========================================
         stage('Verify Services') {
             steps {
                 sh '''
@@ -66,30 +94,39 @@ pipeline {
                     echo "VERIFY REQUIRED SERVICES"
                     echo "========================================="
 
+                    echo
                     echo "OLLAMA_HOST=${OLLAMA_HOST}"
                     echo "LLM_MODEL=${LLM_MODEL}"
                     echo "QDRANT_URL=${QDRANT_URL}"
 
+                    # ---------------------------------
+                    # Ollama
+                    # ---------------------------------
                     echo
                     echo "Checking Ollama..."
 
-                    curl --fail \
-                         --silent \
-                         --show-error \
-                         --max-time 30 \
-                         "${OLLAMA_HOST}/api/tags"
+                    curl \
+                        --fail \
+                        --silent \
+                        --show-error \
+                        --max-time 30 \
+                        "${OLLAMA_HOST}/api/tags"
 
                     echo
                     echo "Ollama connectivity: OK"
 
+                    # ---------------------------------
+                    # Qdrant
+                    # ---------------------------------
                     echo
                     echo "Checking Qdrant..."
 
-                    curl --fail \
-                         --silent \
-                         --show-error \
-                         --max-time 30 \
-                         "${QDRANT_URL}/healthz"
+                    curl \
+                        --fail \
+                        --silent \
+                        --show-error \
+                        --max-time 30 \
+                        "${QDRANT_URL}/healthz"
 
                     echo
                     echo "Qdrant connectivity: OK"
@@ -100,6 +137,9 @@ pipeline {
             }
         }
 
+        // =========================================
+        // 5. OLLAMA MODEL CHECK
+        // =========================================
         stage('Ollama Model Check') {
             steps {
                 sh '''
@@ -109,31 +149,31 @@ pipeline {
                     echo "CHECK OLLAMA MODEL"
                     echo "========================================="
 
-                    RESPONSE=$(curl --fail \
+                    RESPONSE=$(curl \
+                        --fail \
                         --silent \
                         --show-error \
                         --max-time 30 \
                         "${OLLAMA_HOST}/api/tags")
 
+                    echo
+                    echo "Available Ollama models:"
                     echo "${RESPONSE}"
 
-                    if echo "${RESPONSE}" | grep -q '"name":"${LLM_MODEL}"'; then
-                        echo
-                        echo "Required model ${LLM_MODEL} is available."
-                    else
-                        echo
-                        echo "[ERROR] Required model ${LLM_MODEL} is NOT available."
-                        echo
-                        echo "Pull the model in the Ollama container before running Jenkins:"
-                        echo
-                        echo "docker exec agent_llm ollama pull ${LLM_MODEL}"
-                        echo
-                        exit 1
-                    fi
+                    echo
+                    echo "Checking for required model: ${LLM_MODEL}"
+
+                    echo "${RESPONSE}" | grep -q "\"name\":\"${LLM_MODEL}\""
+
+                    echo
+                    echo "Required model ${LLM_MODEL} is available."
                 '''
             }
         }
 
+        // =========================================
+        // 6. UNIT TESTS
+        // =========================================
         stage('Unit Tests') {
             steps {
                 sh '''
@@ -143,17 +183,20 @@ pipeline {
                     echo "RUN UNIT TESTS"
                     echo "========================================="
 
-                    .venv/bin/pytest \
-                        -m "not integration" \
-                        -v
+                    .venv/bin/pytest -m "not integration" -v
+
+                    echo
+                    echo "Unit tests completed successfully."
                 '''
             }
         }
 
+        // =========================================
+        // 7. LLM INTEGRATION TESTS
+        // =========================================
         stage('LLM Integration Tests') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
-
                     sh '''
                         set -e
 
@@ -161,14 +204,18 @@ pipeline {
                         echo "RUN LLM INTEGRATION TESTS"
                         echo "========================================="
 
-                        .venv/bin/pytest \
-                            -m integration \
-                            -v
+                        .venv/bin/pytest -m integration -v
+
+                        echo
+                        echo "LLM integration tests completed successfully."
                     '''
                 }
             }
         }
 
+        // =========================================
+        // 8. SONARQUBE ANALYSIS
+        // =========================================
         stage('SonarQube Analysis') {
             steps {
                 script {
@@ -177,6 +224,13 @@ pipeline {
                     echo "SONARQUBE ANALYSIS"
                     echo "========================================="
 
+                    // Must exactly match:
+                    // Manage Jenkins
+                    // -> Tools
+                    // -> SonarQube Scanner installations
+                    //
+                    // Name:
+                    // SonarScanner
                     def sonarScannerHome = tool name: 'SonarScanner'
 
                     echo "SonarScanner home: ${sonarScannerHome}"
@@ -189,31 +243,44 @@ pipeline {
                             echo "Running SonarScanner..."
 
                             "${sonarScannerHome}/bin/sonar-scanner" \
-                              -Dsonar.projectKey=agentic-ai \
-                              -Dsonar.projectName=agentic-ai \
-                              -Dsonar.sources=app \
-                              -Dsonar.tests=tests \
-                              -Dsonar.python.version=3.13
+                                -Dsonar.projectKey=agentic-ai \
+                                -Dsonar.projectName=agentic-ai \
+                                -Dsonar.sources=app \
+                                -Dsonar.tests=tests \
+                                -Dsonar.python.version=3.13
 
-                            echo "SonarQube analysis completed."
+                            echo
+                            echo "SonarQube analysis completed successfully."
                         """
                     }
                 }
             }
         }
 
+        // =========================================
+        // 9. QUALITY GATE
+        // =========================================
         stage('Quality Gate') {
             steps {
-
                 timeout(time: 10, unit: 'MINUTES') {
+
+                    echo "========================================="
+                    echo "WAITING FOR SONARQUBE QUALITY GATE"
+                    echo "========================================="
 
                     waitForQualityGate(
                         abortPipeline: true
                     )
+
+                    echo
+                    echo "SonarQube Quality Gate passed."
                 }
             }
         }
 
+        // =========================================
+        // 10. DOCKER BUILD
+        // =========================================
         stage('Docker Build') {
             steps {
                 sh '''
@@ -231,28 +298,37 @@ pipeline {
                     echo "Docker image built successfully."
 
                     echo
-                    echo "Image:"
+                    echo "Docker image:"
                     docker images ${DOCKER_IMAGE}:${BUILD_NUMBER}
                 '''
             }
         }
     }
 
+    // =============================================
+    // POST ACTIONS
+    // =============================================
     post {
 
         success {
             echo "========================================="
             echo "CI/CD PIPELINE SUCCESS"
             echo "========================================="
+
             echo "Build: ${BUILD_NUMBER}"
             echo "Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
+
+            echo "========================================="
         }
 
         failure {
             echo "========================================="
             echo "CI/CD PIPELINE FAILED"
             echo "========================================="
+
             echo "Build: ${BUILD_NUMBER}"
+
+            echo "========================================="
         }
 
         always {
