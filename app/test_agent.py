@@ -41,7 +41,7 @@ client = TestClient(app)
 
 COLLECTION_NAME = "knowledge"
 EXPECTED_EMBEDDING_MODEL = "nomic-embed-text"
-EXPECTED_LLM_MODEL = "llama3"
+EXPECTED_LLM_MODEL = "llama3:latest"
 
 
 # ============================================================
