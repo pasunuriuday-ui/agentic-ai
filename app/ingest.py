@@ -4,8 +4,8 @@ import sys
 import httpx
 
 # Configuration
-OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-QDRANT_URL = os.getenv("QDRANT_HOST", "http://localhost:6333")
+OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://agent_llm:11434")
+QDRANT_URL = os.getenv("QDRANT_HOST", "http://agent_vector_db:6333")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 COLLECTION_NAME = "knowledge"
 
