@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # ============================================================
 
     ollama_host: str = Field(
-        default="http://localhost:11434",
+        default="http://agent_llm:11434",
         min_length=1,
         description="Ollama server URL",
     )
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     # ============================================================
 
     qdrant_host: str = Field(
-        default="http://localhost:6333",
+        default="http://agent_vector_db:6333",
         min_length=1,
         description="Qdrant server URL",
     )

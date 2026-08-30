@@ -5,35 +5,22 @@ from typing import List
 
 import httpx
 
+from app.core.config import settings
+
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
-OLLAMA_URL = os.getenv(
-    "OLLAMA_HOST",
-    "http://localhost:11434"
-).rstrip("/")
+OLLAMA_URL = settings.ollama_host.rstrip("/")
 
-QDRANT_URL = os.getenv(
-    "QDRANT_HOST",
-    "http://localhost:6333"
-).rstrip("/")
+QDRANT_URL = settings.qdrant_host.rstrip("/")
 
-EMBED_MODEL = os.getenv(
-    "EMBED_MODEL",
-    "nomic-embed-text"
-)
+EMBED_MODEL = settings.embedding_model
 
-LLM_MODEL = os.getenv(
-    "LLM_MODEL",
-    "llama3"
-)
+LLM_MODEL = settings.llm_model
 
-COLLECTION_NAME = os.getenv(
-    "COLLECTION_NAME",
-    "knowledge"
-)
+COLLECTION_NAME = settings.collection_name
 
 TOP_K = int(
     os.getenv("TOP_K", "2")
